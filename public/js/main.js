@@ -35,28 +35,58 @@ document.addEventListener('DOMContentLoaded', () => {
             playerCard.className = 'col-md-6 col-lg-4';
             playerCard.innerHTML = `
                 <div class="player-card">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <div class="player-info">
-                            <img src="${player.avatar}" alt="${player.name}" class="player-avatar" style="border-color: ${player.color};">
-                            <div>
+                    <div class="d-flex align-items-center">
+                        <div class="player-info d-flex align-items-center flex-grow-1">
+                            <img src="${player.avatar}" alt="${player.name}" class="player-avatar" style="border-color: ${player.color};" data-id="${player.id}">
+                            <div class="ms-2">
                                 <h5 class="mb-0">${player.name}</h5>
                                 <div class="text-muted">Puntos: <span class="points-display">${player.points}</span></div>
                             </div>
                         </div>
-                        <div>
-                            <button class="btn btn-sm btn-outline-danger delete-btn" data-id="${player.id}"><i class="bi bi-trash"></i> Eliminar</button>
+                        <div class="ms-2 d-flex align-items-center">
+                            <button class="btn btn-sm btn-danger remove-point-btn" data-id="${player.id}">-</button>
+                            <button class="btn btn-sm btn-success ms-1 add-point-btn" data-id="${player.id}">+</button>
                         </div>
-                    </div>
-                    <div class="player-controls">
-                        <button class="btn btn-sm btn-danger remove-point-btn" data-id="${player.id}">-</button>
-                        <span class="points-display">${player.points}</span>
-                        <button class="btn btn-sm btn-success add-point-btn" data-id="${player.id}">+</button>
-                        <button class="btn btn-sm btn-outline-primary ms-auto edit-btn" data-id="${player.id}">Editar</button>
                     </div>
                 </div>
             `;
             
             playersList.appendChild(playerCard);
+
+            // Add long-press event listener for deletion
+            const playerAvatar = playerCard.querySelector('.player-avatar');
+            let pressTimer;
+
+            playerAvatar.addEventListener('mousedown', function() {
+                pressTimer = setTimeout(() => {
+                    deletePlayer(this.dataset.id);
+                }, 3000);
+            });
+
+            playerAvatar.addEventListener('mouseleave', function() {
+                clearTimeout(pressTimer);
+            });
+
+            playerAvatar.addEventListener('mouseup', function() {
+                clearTimeout(pressTimer);
+            });
+
+            // Add touch events for mobile devices
+            playerAvatar.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                pressTimer = setTimeout(() => {
+                    deletePlayer(this.dataset.id);
+                }, 3000);
+            });
+
+            playerAvatar.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                clearTimeout(pressTimer);
+            });
+
+            playerAvatar.addEventListener('touchmove', function(e) {
+                clearTimeout(pressTimer);
+            });
         });
         
         // Add event listeners to buttons
@@ -66,14 +96,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.querySelectorAll('.remove-point-btn').forEach(btn => {
             btn.addEventListener('click', () => removePoint(btn.dataset.id));
-        });
-        
-        document.querySelectorAll('.delete-btn').forEach(btn => {
-            btn.addEventListener('click', () => deletePlayer(btn.dataset.id));
-        });
-        
-        document.querySelectorAll('.edit-btn').forEach(btn => {
-            btn.addEventListener('click', () => editPlayer(btn.dataset.id));
         });
         
         // Save to localStorage

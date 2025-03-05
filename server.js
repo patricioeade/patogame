@@ -1,75 +1,84 @@
 const express = require('express');
 const http = require('http');
-const socketIo = require('socket.io');
-const cors = require('cors');
+const WebSocket = require('ws');
 const path = require('path');
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 app.use(express.static('public'));
 
+// Create HTTP server
 const server = http.createServer(app);
-const io = socketIo(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
-});
+
+// Create WebSocket server
+const wss = new WebSocket.Server({ server });
 
 // Store players data
 let players = [];
 // Default max points to win
 let maxPoints = 30;
 
-// Socket.IO connection handling
-io.on('connection', (socket) => {
+// Broadcast to all clients
+const broadcast = (message) => {
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    });
+};
+
+// WebSocket connection handling
+wss.on('connection', (ws) => {
     console.log('New client connected');
 
     // Send current players to new connections
-    socket.emit('initialPlayers', players);
+    ws.send(JSON.stringify({ type: 'initialPlayers', data: players }));
     // Send current max points to new connections
-    socket.emit('maxPointsUpdated', maxPoints);
+    ws.send(JSON.stringify({ type: 'maxPointsUpdated', data: maxPoints }));
 
-    // Handle player updates
-    socket.on('updatePlayer', (data) => {
-        const playerIndex = players.findIndex(p => p.id === data.id);
-        if (playerIndex !== -1) {
-            players[playerIndex] = data;
-            io.emit('playersUpdated', players);
-
-            // Check for winner
-            if (data.points >= maxPoints) {
-                io.emit('winner', data);
+    ws.on('message', (message) => {
+        try {
+            const msg = JSON.parse(message);
+            
+            switch (msg.type) {
+                case 'updatePlayer':
+                    const playerIndex = players.findIndex(p => p.id === msg.data.id);
+                    if (playerIndex !== -1) {
+                        players[playerIndex] = msg.data;
+                        broadcast(JSON.stringify({ type: 'playersUpdated', data: players }));
+                        
+                        // Check for winner
+                        if (msg.data.points >= maxPoints) {
+                            broadcast(JSON.stringify({ type: 'winner', data: msg.data }));
+                        }
+                    }
+                    break;
+                    
+                case 'addPlayer':
+                    players.push(msg.data);
+                    broadcast(JSON.stringify({ type: 'playersUpdated', data: players }));
+                    break;
+                    
+                case 'deletePlayer':
+                    players = players.filter(p => p.id !== msg.data);
+                    broadcast(JSON.stringify({ type: 'playersUpdated', data: players }));
+                    break;
+                    
+                case 'resetPoints':
+                    players = players.map(p => ({ ...p, points: 0 }));
+                    broadcast(JSON.stringify({ type: 'playersUpdated', data: players }));
+                    break;
+                    
+                case 'updateMaxPoints':
+                    maxPoints = msg.data;
+                    broadcast(JSON.stringify({ type: 'maxPointsUpdated', data: maxPoints }));
+                    break;
             }
+        } catch (error) {
+            console.error('Error processing message:', error);
         }
     });
 
-    // Handle new player addition
-    socket.on('addPlayer', (player) => {
-        players.push(player);
-        io.emit('playersUpdated', players);
-    });
-
-    // Handle player deletion
-    socket.on('deletePlayer', (playerId) => {
-        players = players.filter(p => p.id !== playerId);
-        io.emit('playersUpdated', players);
-    });
-
-    // Handle points reset
-    socket.on('resetPoints', () => {
-        players = players.map(p => ({ ...p, points: 0 }));
-        io.emit('playersUpdated', players);
-    });
-
-    // Handle max points update
-    socket.on('updateMaxPoints', (points) => {
-        maxPoints = points;
-        io.emit('maxPointsUpdated', maxPoints);
-    });
-
-    socket.on('disconnect', () => {
+    ws.on('close', () => {
         console.log('Client disconnected');
     });
 });
@@ -82,6 +91,11 @@ app.get('/', (req, res) => {
 // Serve the race page
 app.get('/race', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'race.html'));
+});
+
+// Serve the login page
+app.get('/login', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
 const PORT = process.env.PORT || 3001;
